@@ -56,6 +56,19 @@ def self_info():
             print 'FOLLOWS %s' % (user_info['data']['counts']['follows'])
             print 'FOLLOWED BY %s' % (user_info['data']['counts']['followed_by'])
             print 'CODE %s' % (user_info['meta']['code'])
+            query = models.user.select().where(models.user.user_id == user_info['data']['id'])
+            if len(query)>0:
+                query[0].user_name = user_info['data']['username']
+                query[0].fullanme = user_info['data']['full_name']
+                query[0].followed_by_count= user_info['data']['counts']['followed_by']
+                query[0].follows_count = user_info['data']['counts']['follows']
+                query[0].save()
+            else:
+                self_pro = models.user(user_id=user_info['data']['id'], user_name=user_info['data']['username'],
+                                       fullname=user_info['data']['full_name'],
+                                       followed_by_count=user_info['data']['counts']['followed_by'],
+                                       followers_count=user_info['data']['counts']['follows'])
+                self_pro.save()
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
@@ -213,6 +226,23 @@ def get_user_post(insta_username):
                 print 'Liked by ' + str (user_post['data'][x]['likes']['count']) + ' people.'
                 print 'Total comments: ' + str (user_post['data'][x]['comments']['count'])
                 print 'media downloaded'
+                media_type=user_post['data'][x]['type']
+
+                query = models.media.select ().where (models.media.media_id == user_post['data'][x]['id'])
+                if len (query) > 0:
+                    print'update'
+                    query[0].media_link = user_post['data'][x][type+'s']['standard_resolution']['url']
+                    query[0].likes = user_post['data'][x]['likes']['count']
+                    query[0].comment_count = user_post['data'][x]['comments']['count']
+                    query[0].save ()
+                else:
+                    new_media = models.media (user_id=user_id, media_id=user_post['data'][x]['id'],
+                                              media_type=media_type,
+                                              media_link=user_post['data'][x][media_type+'s']['standard_resolution']['url'],
+                                              likes=user_post['data'][x]['likes']['count'],
+                                              comment_count= user_post['data'][x]['comments']['count'])
+                    new_media.save ()
+
                 return user_post['data'][x]['id']
 
             else:
@@ -270,6 +300,10 @@ def like_a_post(insta_username):
         post_a_like = requests.post (request_url, payload).json ()
         if post_a_like['meta']['code'] == 200:
             print 'Like was successful!'
+            query = models.media.select().where(models.media.media_id == media_id)
+            if len(query)>0:
+                query[0].likes += 1
+                query[0].save()
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
@@ -280,6 +314,7 @@ def like_a_post(insta_username):
 # Function to comment on a user post
 def comment_a_post(insta_username):
     try:
+        user_id = get_user_id(insta_username)
         media_id = get_user_post (insta_username)
         request_url = (base_url + 'media/%s/comments') % media_id
         comment_text = raw_input ('Enter comment text: ')
@@ -288,6 +323,13 @@ def comment_a_post(insta_username):
         post_a_like = requests.post (request_url, payload).json ()
         if post_a_like['meta']['code'] == 200:
             print 'Comment was successful!'
+            query1 = models.media.select().where(models.media.media_id == media_id)
+            if len(query1)>0:
+                query1[0].comment_count += 1
+                query1[0].save()
+                new_comment = models.comments(user_id=user_id, media_id=media_id, comment_id='',
+                                              comment_text=comment_text)
+                new_comment.save()
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
@@ -348,13 +390,13 @@ def start_bot():
         choice = input ('What do you want to do?'
                         '\n1. Get self information'
                         '\n2. Get your own recent posts'
-                        '\n3. Get media id'
+                        '\n3. Get media ids for all posts of a user stored in database'
                         '\n4. Get user recent post'
                         '\n5. Like a post'
                         '\n6. Negative comment deletion'
                         '\n7. Get user details'
                         '\n8. Comment on post'
-                        '\n20. Exit'
+                        '\n10. Exit'
                         '\n Your choice please: ')
         if choice == 1:
             self_info ()
@@ -378,7 +420,7 @@ def start_bot():
         elif choice == 8:
             name = raw_input ('Enter user name: ')
             comment_a_post (name)
-        elif choice == 20:
+        elif choice == 10:
             flag = False
         else:
             print 'Invalid choice'
