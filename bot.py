@@ -112,7 +112,8 @@ def own_comments():
                     blob = TextBlob (comment_text, analyzer=NaiveBayesAnalyzer ())
                     print blob.sentiment
                     print blob.sentiment.classification
-                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id, comment_text=comment_text,
+                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id,
+                                                   comment_text=comment_text,
                                                    classification=blob.sentiment.classification,
                                                    positive_sentiments=blob.sentiment.p_pos,
                                                    negative_sentiments=blob.sentiment.p_neg)
@@ -125,39 +126,6 @@ def own_comments():
     except Exception as e:
         print e
         print 'Exception in own comments'
-
-
-# Function to fetch list og post likers
-def post_liker_list():
-    try:
-        c = input('\n1. To get self post liker'
-                  '\n2. To get user post liker'
-                  '\n Enter your choice: ')
-        if c == 1:
-            media_id = self_media_id ()
-            user_id = self_info()
-        elif c == 2:
-            name = raw_input('Enter username')
-            media_id = get_user_post(name)
-            user_id = get_user_info(name)
-        request_url = base_url + 'media/%s/likes?access_token=%s' % (media_id, access_token)
-        print request_url
-        response = requests.get (request_url).json ()
-        if response['meta']['code'] == 200:
-            if len (response['data']) > 0:
-                x = 1
-                for likers in response['data']:
-                    print str(x)+' '+likers['username']
-                    x += 1
-                    like = models.likers_list(user_id=user_id, media_id=media_id, liker_username=likers['username'])
-                    like.save()
-            else:
-                print 'no likes'
-        else:
-            print 'code not 200'
-    except Exception as e:
-        print e
-        print 'Exception in post liker list'
 
 
 # Function to delete self negative comments
@@ -179,7 +147,8 @@ def self_comment_delete():
                     print blob.sentiment
                     print blob.sentiment.classification
 
-                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id, comment_text=comment_text,
+                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id,
+                                                   comment_text=comment_text,
                                                    classification=blob.sentiment.classification,
                                                    positive_sentiments=blob.sentiment.p_pos,
                                                    negative_sentiments=blob.sentiment.p_neg)
@@ -224,7 +193,7 @@ def get_own_post():
                     media_url = own_info['data'][x]['videos']['standard_resolution']['url']
                     urllib.urlretrieve (media_url, media_name)
 
-                elif own_info['data'][x]['id'] == 'carousel':
+                elif own_info['data'][x]['type'] == 'carousel':
                     x = 0
                     for data in own_info['data'][x]['carousel_media']:
                         media_name = str (x) + str (own_info['data'][data]['id']) + '.jpg'
@@ -244,6 +213,45 @@ def get_own_post():
     except Exception as e:
         print e
         print 'There is some error.'
+
+
+# Function to get recently liked self media and sve post to database
+def recent_liked_posts():
+    try:
+        media_link = ''
+        request_url = base_url + 'users/self/media/liked?access_token=%s' % access_token
+        response = requests.get(request_url).json()
+        if response['meta']['code'] == 200:
+            if len(response['data']) > 0:
+                for index in range(len(response['data'])):
+                    media_id = response['data'][index]['id']
+                    m_type = response['data'][index]['type']
+                    likes = response['data'][index]['likes']['count']
+                    comment_count = response['data'][index]['comments']['count']
+                    if m_type == 'image' or 'video':
+                        media_link = response['data'][index][m_type+'s']['standard_resolution']['url']
+                    elif response['type'] == 'carousel':
+                        media_link = response['data'][index]['images']['standard_resolution']['url']
+                    print str(index+1) + ' Media id: ' + str(media_id)
+                    print str(index+1) + ' Likes: ' + str(likes)
+                    print str (index + 1) + ' Comments: ' + str(comment_count)
+                    print str(index+1) + ' Media caption: ' + response['data'][index]['caption']['text']
+                    query = models.recent_liked_posts.select().where(models.recent_liked_posts.media_id == media_id)
+                    if len(query) > 0:
+                        query[0].likes = likes
+                        query[0].comment_count = comment_count
+                        query[0].save()
+                    else:
+                        post = models.recent_liked_posts(media_id=media_id, media_type=m_type, media_link=media_link,
+                                                         likes=likes, comment_count=comment_count)
+                        post.save()
+            else:
+                print'no posts'
+        else:
+            print 'code not 200'
+    except Exception as e:
+        print e
+        print 'Exception in recent liked posts'
 
 
 # Function to get user id by username
@@ -381,6 +389,39 @@ def get_user_post(insta_username):
         print 'Exception in get user posts'
 
 
+# Function to fetch list og post likers
+def post_liker_list():
+    try:
+        c = input ('\n1. To get self post liker'
+                   '\n2. To get user post liker'
+                   '\n Enter your choice: ')
+        if c == 1:
+            media_id = self_media_id ()
+            user_id = self_info ()
+        elif c == 2:
+            name = raw_input ('Enter username')
+            media_id = get_user_post (name)
+            user_id = get_user_info (name)
+        request_url = base_url + 'media/%s/likes?access_token=%s' % (media_id, access_token)
+        print request_url
+        response = requests.get (request_url).json ()
+        if response['meta']['code'] == 200:
+            if len (response['data']) > 0:
+                x = 1
+                for likers in response['data']:
+                    print str (x) + ' ' + likers['username']
+                    x += 1
+                    like = models.likers_list (user_id=user_id, media_id=media_id, liker_username=likers['username'])
+                    like.save ()
+            else:
+                print 'no likes'
+        else:
+            print 'code not 200'
+    except Exception as e:
+        print e
+        print 'Exception in post liker list'
+
+
 # Function to get media id for liking or commenting any instagram user post
 def get_media_id(insta_user):
     try:
@@ -458,6 +499,7 @@ def comment_a_post(insta_username):
         print 'Exception in comment a post'
 
 
+# Function for deletion of negative comments
 def delete_negative_comment(insta_username):
     try:
         user_id = get_user_id (insta_username)
@@ -500,6 +542,7 @@ def delete_negative_comment(insta_username):
         print 'Exception in comment deletion'
 
 
+# Function to start the bot for the selection of different functionality available
 def start_bot():
     flag = True
     try:
@@ -507,7 +550,7 @@ def start_bot():
             choice = input ('What do you want to do?'
                             '\n1. Get self information'
                             '\n2. Get your own recent posts'
-                            '\n3. Get media ids for all posts of a user and store in database'
+                            '\n3. Get media details for all posts of a user and store in database'
                             '\n4. Get user recent post'
                             '\n5. Like a post'
                             '\n6. Negative comment deletion'
@@ -515,44 +558,58 @@ def start_bot():
                             '\n8. Comment on post'
                             '\n9. Get own comments'
                             '\n10. Self media id'
-                            '\n11. Self comments'
+                            '\n11. Self recently liked posts'
                             '\n12. Self negative comment deletion'
                             '\n13. List of people liked self post'
                             '\n14. Exit'
                             '\n Your choice please: ')
             if choice == 1:
+                # Display self information
                 self_info ()
             elif choice == 2:
+                # help in own post selection
                 get_own_post ()
             elif choice == 3:
+                # get media details for all posts by a user and store data in database
                 name = raw_input ('Enter user name: ')
                 get_media_id (name)
             elif choice == 4:
+                # get selected user post
                 name = raw_input ('Enter user name: ')
                 get_user_post (name)
             elif choice == 5:
+                # liking a post
                 name = raw_input ('Enter user name: ')
                 like_a_post (name)
             elif choice == 6:
+                # deletion of negative comments of a user
                 name = raw_input ('Enter user name: ')
                 delete_negative_comment (name)
             elif choice == 7:
+                # getting user information
                 name = raw_input ('Enter user name: ')
                 get_user_info (name)
             elif choice == 8:
+                # commenting a user post
                 name = raw_input ('Enter user name: ')
                 comment_a_post (name)
             elif choice == 9:
+                # getting comments of your own posts
                 own_comments ()
             elif choice == 10:
+                # getting media id of your own posts
                 self_media_id ()
             elif choice == 11:
-                own_comments ()
+                # getting own recently liked posts
+                recent_liked_posts()
             elif choice == 12:
+                # deletion of negative comments over self posts
                 self_comment_delete ()
             elif choice == 13:
+                # fetching list of people like post
                 post_liker_list ()
             elif choice == 14:
+                # Exit
                 flag = False
             else:
                 print 'Invalid choice'

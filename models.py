@@ -57,8 +57,19 @@ class likers_list (peewee.Model):
         database = database
 
 
+class recent_liked_posts (peewee.Model):
+    media_id = peewee.ForeignKeyField(media, to_field='media_id')
+    media_type = peewee.CharField()
+    media_link = peewee.CharField()
+    likes = peewee.IntegerField()
+    comment_count = peewee.IntegerField()
+
+    class Meta:
+        database = database
+
+
 def initialize_db():
-    database.create_tables ([user, media, comments, self_comment, likers_list], safe=True)
+    database.create_tables ([user, media, comments, self_comment, likers_list,recent_liked_posts], safe=True)
 
 
 initialize_db()
