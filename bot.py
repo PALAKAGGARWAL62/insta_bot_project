@@ -13,10 +13,6 @@ from textblob.sentiments import NaiveBayesAnalyzer
 # to implement database
 import models
 
-# for data visualization
-#import matplotlib.pyplot as plt
-
-
 ''' 
 #fetch access token   ...json format url
  response = requests.get ('https://jsonbin.io/b/59d0f30408be13271f7df29c').json ()
@@ -56,24 +52,153 @@ def self_info():
             print 'FOLLOWS %s' % (user_info['data']['counts']['follows'])
             print 'FOLLOWED BY %s' % (user_info['data']['counts']['followed_by'])
             print 'CODE %s' % (user_info['meta']['code'])
-            query = models.user.select().where(models.user.user_id == user_info['data']['id'])
-            if len(query)>0:
+            query = models.user.select ().where (models.user.user_id == user_info['data']['id'])
+            if len (query) > 0:
                 query[0].user_name = user_info['data']['username']
                 query[0].fullanme = user_info['data']['full_name']
-                query[0].followed_by_count= user_info['data']['counts']['followed_by']
+                query[0].followed_by_count = user_info['data']['counts']['followed_by']
                 query[0].follows_count = user_info['data']['counts']['follows']
-                query[0].save()
+                query[0].save ()
             else:
-                self_pro = models.user(user_id=user_info['data']['id'], user_name=user_info['data']['username'],
-                                       fullname=user_info['data']['full_name'],
-                                       followed_by_count=user_info['data']['counts']['followed_by'],
-                                       followers_count=user_info['data']['counts']['follows'])
-                self_pro.save()
+                self_pro = models.user (user_id=user_info['data']['id'], user_name=user_info['data']['username'],
+                                        fullname=user_info['data']['full_name'],
+                                        followed_by_count=user_info['data']['counts']['followed_by'],
+                                        followers_count=user_info['data']['counts']['follows'])
+                self_pro.save ()
+            return user_info['data']['id']
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
         print e
         print 'There is an exception in self information'
+
+
+# Function to get our media id
+def self_media_id():
+    try:
+        request_url = (base_url + 'users/self/media/recent/?access_token=%s') % access_token
+        own_info = requests.get (request_url).json ()
+        if own_info['meta']['code'] == 200:
+            if len (own_info['data']) > 0:
+                print 'Total posts are: ' + str (len (own_info['data']))
+                x = input ('Which post you want to fetch id: ')
+                x -= 1
+                media_id = own_info['data'][x]['id']
+                print media_id
+                return media_id
+            else:
+                print 'no posts'
+        else:
+            print 'code not 200'
+    except Exception as e:
+        print e
+        print 'Exception in self media id'
+
+
+# Function to get self comments
+def own_comments():
+    try:
+        my_media_id = self_media_id ()
+        request_url = (base_url + 'media/%s/comments?access_token=%s') % (my_media_id, access_token)
+        print request_url
+        response = requests.get (request_url).json ()
+        if response['meta']['code'] == 200:
+            # Check if we have comments on the post
+            if len (response['data']) > 0:
+                # And then read them one by one
+                for comment in response['data']:
+                    comment_id = comment['id']
+                    comment_text = comment['text']
+                    blob = TextBlob (comment_text, analyzer=NaiveBayesAnalyzer ())
+                    print blob.sentiment
+                    print blob.sentiment.classification
+                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id, comment_text=comment_text,
+                                                   classification=blob.sentiment.classification,
+                                                   positive_sentiments=blob.sentiment.p_pos,
+                                                   negative_sentiments=blob.sentiment.p_neg)
+                    comment.save ()
+                    return comment_id
+            else:
+                print 'No comments'
+        else:
+            print 'code other than 200'
+    except Exception as e:
+        print e
+        print 'Exception in own comments'
+
+
+# Function to fetch list og post likers
+def post_liker_list():
+    try:
+        c = input('\n1. To get self post liker'
+                  '\n2. To get user post liker'
+                  '\n Enter your choice: ')
+        if c == 1:
+            media_id = self_media_id ()
+            user_id = self_info()
+        elif c == 2:
+            name = raw_input('Enter username')
+            media_id = get_user_post(name)
+            user_id = get_user_info(name)
+        request_url = base_url + 'media/%s/likes?access_token=%s' % (media_id, access_token)
+        print request_url
+        response = requests.get (request_url).json ()
+        if response['meta']['code'] == 200:
+            if len (response['data']) > 0:
+                x = 1
+                for likers in response['data']:
+                    print str(x)+' '+likers['username']
+                    x += 1
+                    like = models.likers_list(user_id=user_id, media_id=media_id, liker_username=likers['username'])
+                    like.save()
+            else:
+                print 'no likes'
+        else:
+            print 'code not 200'
+    except Exception as e:
+        print e
+        print 'Exception in post liker list'
+
+
+# Function to delete self negative comments
+def self_comment_delete():
+    try:
+        media_id = self_media_id ()
+        my_media_id = self_media_id ()
+        request_url = (base_url + 'media/%s/comments?access_token=%s') % (my_media_id, access_token)
+        print request_url
+        response = requests.get (request_url).json ()
+        if response['meta']['code'] == 200:
+            # Check if we have comments on the post
+            if len (response['data']) > 0:
+                # And then read them one by one
+                for comment in response['data']:
+                    comment_id = comment['id']
+                    comment_text = comment['text']
+                    blob = TextBlob (comment_text, analyzer=NaiveBayesAnalyzer ())
+                    print blob.sentiment
+                    print blob.sentiment.classification
+
+                    comment = models.self_comment (media_id=my_media_id, comment_id=comment_id, comment_text=comment_text,
+                                                   classification=blob.sentiment.classification,
+                                                   positive_sentiments=blob.sentiment.p_pos,
+                                                   negative_sentiments=blob.sentiment.p_neg)
+                    comment.save ()
+
+                    if blob.sentiment.p_neg > blob.sentiment.p_pos:
+                        delete_url = (base_url + 'media/%s/comments/%s/?access_token=%s') % (
+                            media_id, comment_id, access_token)
+                        print 'DELETE request url : %s' % delete_url
+
+                        delete_info = requests.delete (delete_url).json ()
+
+                        if delete_info['meta']['code'] == 200:
+                            print 'Comment successfully deleted!'
+                        else:
+                            print 'Could not delete the comment'
+    except Exception as e:
+        print e
+        print 'Exception in self comment deletion'
 
 
 # Function to get your own posts
@@ -108,10 +233,10 @@ def get_own_post():
                         urllib.urlretrieve (media_url, media_name)
                         x += 1
 
-                return own_info['data'][x]['id']
                 print 'media id: ' + str (own_info['data'][x]['id'])
                 print 'Liked by ' + str (own_info['data'][x]['likes']['count']) + ' people.'
                 print 'Total comments: ' + str (own_info['data'][x]['comments']['count'])
+                return own_info['data'][x]['id']
             else:
                 print 'No post by the user'
         else:
@@ -226,21 +351,22 @@ def get_user_post(insta_username):
                 print 'Liked by ' + str (user_post['data'][x]['likes']['count']) + ' people.'
                 print 'Total comments: ' + str (user_post['data'][x]['comments']['count'])
                 print 'media downloaded'
-                media_type=user_post['data'][x]['type']
+                media_type = user_post['data'][x]['type']
 
                 query = models.media.select ().where (models.media.media_id == user_post['data'][x]['id'])
                 if len (query) > 0:
                     print'update'
-                    query[0].media_link = user_post['data'][x][type+'s']['standard_resolution']['url']
+                    query[0].media_link = user_post['data'][x][media_type + 's']['standard_resolution']['url']
                     query[0].likes = user_post['data'][x]['likes']['count']
                     query[0].comment_count = user_post['data'][x]['comments']['count']
                     query[0].save ()
                 else:
                     new_media = models.media (user_id=user_id, media_id=user_post['data'][x]['id'],
                                               media_type=media_type,
-                                              media_link=user_post['data'][x][media_type+'s']['standard_resolution']['url'],
+                                              media_link=user_post['data'][x][media_type + 's']['standard_resolution'][
+                                                  'url'],
                                               likes=user_post['data'][x]['likes']['count'],
-                                              comment_count= user_post['data'][x]['comments']['count'])
+                                              comment_count=user_post['data'][x]['comments']['count'])
                     new_media.save ()
 
                 return user_post['data'][x]['id']
@@ -267,7 +393,7 @@ def get_media_id(insta_user):
                 for data_item in response['data']:
                     media_id = data_item['id']
                     media_type = data_item['type']
-                    media_link = data_item[media_type+'s']['standard_resolution']['url']
+                    media_link = data_item[media_type + 's']['standard_resolution']['url']
                     likes = data_item['likes']['count']
                     comment_count = data_item['comments']['count']
                     query = models.media.select ().where (models.media.media_id == media_id)
@@ -293,17 +419,17 @@ def get_media_id(insta_user):
 # Function to like a post
 def like_a_post(insta_username):
     try:
-        media_id = get_user_post(insta_username)
+        media_id = get_user_post (insta_username)
         request_url = (base_url + 'media/%s/likes') % media_id
         payload = {"access_token": access_token}
         print 'POST request url : %s' % request_url
         post_a_like = requests.post (request_url, payload).json ()
         if post_a_like['meta']['code'] == 200:
             print 'Like was successful!'
-            query = models.media.select().where(models.media.media_id == media_id)
-            if len(query)>0:
+            query = models.media.select ().where (models.media.media_id == media_id)
+            if len (query) > 0:
                 query[0].likes += 1
-                query[0].save()
+                query[0].save ()
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
@@ -314,7 +440,6 @@ def like_a_post(insta_username):
 # Function to comment on a user post
 def comment_a_post(insta_username):
     try:
-        user_id = get_user_id(insta_username)
         media_id = get_user_post (insta_username)
         request_url = (base_url + 'media/%s/comments') % media_id
         comment_text = raw_input ('Enter comment text: ')
@@ -323,13 +448,9 @@ def comment_a_post(insta_username):
         post_a_like = requests.post (request_url, payload).json ()
         if post_a_like['meta']['code'] == 200:
             print 'Comment was successful!'
-            query1 = models.media.select().where(models.media.media_id == media_id)
-            if len(query1)>0:
-                query1[0].comment_count += 1
-                query1[0].save()
-                new_comment = models.comments(user_id=user_id, media_id=media_id, comment_id='',
-                                              comment_text=comment_text)
-                new_comment.save()
+            query1 = models.media.select ().where (models.media.media_id == media_id)
+            query1[0].comment_count += 1
+            query1[0].save ()
         else:
             print 'Status code other than 200 received!'
     except Exception as e:
@@ -339,8 +460,8 @@ def comment_a_post(insta_username):
 
 def delete_negative_comment(insta_username):
     try:
+        user_id = get_user_id (insta_username)
         media_id = get_user_post (insta_username)
-        user_id = get_user_id(insta_username)
         request_url = (base_url + 'media/%s/comments/?access_token=%s') % (media_id, access_token)
         print 'GET request url : %s' % request_url
         comment_info = requests.get (request_url).json ()
@@ -351,16 +472,12 @@ def delete_negative_comment(insta_username):
                 for comment in comment_info['data']:
                     comment_id = comment['id']
                     comment_text = comment['text']
-                    query = models.comments.select().where (models.comments.comment_id == comment_id)
-                    if len(query)>0:
-                        query[0].comment_text = comment_text
-                        query[0].save()
-                    else:
-                        comment_obj = models.comments(user_id=user_id, media_id=media_id, comment_id=comment_id
-                                                      , comment_text=comment_text)
-                    comment_obj.save()
                     blob = TextBlob (comment_text, analyzer=NaiveBayesAnalyzer ())
                     print blob.sentiment
+                    print blob.sentiment.classification
+                    comment = models.comments (user_id=user_id, media_id=media_id, comment_id=comment_id,
+                                               comment_text=comment_text)
+                    comment.save ()
                     if blob.sentiment.p_neg > blob.sentiment.p_pos:
                         comment_id = comment['id']
                         delete_url = (base_url + 'media/%s/comments/%s/?access_token=%s') % (
@@ -385,49 +502,63 @@ def delete_negative_comment(insta_username):
 
 def start_bot():
     flag = True
-    # try:
-    while flag:
-        choice = input ('What do you want to do?'
-                        '\n1. Get self information'
-                        '\n2. Get your own recent posts'
-                        '\n3. Get media ids for all posts of a user stored in database'
-                        '\n4. Get user recent post'
-                        '\n5. Like a post'
-                        '\n6. Negative comment deletion'
-                        '\n7. Get user details'
-                        '\n8. Comment on post'
-                        '\n10. Exit'
-                        '\n Your choice please: ')
-        if choice == 1:
-            self_info ()
-        elif choice == 2:
-            get_own_post ()
-        elif choice == 3:
-            name = raw_input ('Enter user name: ')
-            get_media_id (name)
-        elif choice == 4:
-            name = raw_input ('Enter user name: ')
-            get_user_post (name)
-        elif choice == 5:
-            name = raw_input ('Enter user name: ')
-            like_a_post (name)
-        elif choice == 6:
-            name = raw_input ('Enter user name: ')
-            delete_negative_comment (name)
-        elif choice == 7:
-            name = raw_input ('Enter user name: ')
-            get_user_info (name)
-        elif choice == 8:
-            name = raw_input ('Enter user name: ')
-            comment_a_post (name)
-        elif choice == 10:
-            flag = False
-        else:
-            print 'Invalid choice'
-    '''except Exception as e:
+    try:
+        while flag:
+            choice = input ('What do you want to do?'
+                            '\n1. Get self information'
+                            '\n2. Get your own recent posts'
+                            '\n3. Get media ids for all posts of a user and store in database'
+                            '\n4. Get user recent post'
+                            '\n5. Like a post'
+                            '\n6. Negative comment deletion'
+                            '\n7. Get user details'
+                            '\n8. Comment on post'
+                            '\n9. Get own comments'
+                            '\n10. Self media id'
+                            '\n11. Self comments'
+                            '\n12. Self negative comment deletion'
+                            '\n13. List of people liked self post'
+                            '\n14. Exit'
+                            '\n Your choice please: ')
+            if choice == 1:
+                self_info ()
+            elif choice == 2:
+                get_own_post ()
+            elif choice == 3:
+                name = raw_input ('Enter user name: ')
+                get_media_id (name)
+            elif choice == 4:
+                name = raw_input ('Enter user name: ')
+                get_user_post (name)
+            elif choice == 5:
+                name = raw_input ('Enter user name: ')
+                like_a_post (name)
+            elif choice == 6:
+                name = raw_input ('Enter user name: ')
+                delete_negative_comment (name)
+            elif choice == 7:
+                name = raw_input ('Enter user name: ')
+                get_user_info (name)
+            elif choice == 8:
+                name = raw_input ('Enter user name: ')
+                comment_a_post (name)
+            elif choice == 9:
+                own_comments ()
+            elif choice == 10:
+                self_media_id ()
+            elif choice == 11:
+                own_comments ()
+            elif choice == 12:
+                self_comment_delete ()
+            elif choice == 13:
+                post_liker_list ()
+            elif choice == 14:
+                flag = False
+            else:
+                print 'Invalid choice'
+    except Exception as e:
         print e
         print 'Exception in start bot'
-'''
 
 
 start_bot ()

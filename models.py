@@ -29,15 +29,36 @@ class media (peewee.Model):
 class comments (peewee.Model):
     comment_id = peewee.CharField (unique=True)
     user_id = peewee.ForeignKeyField(user, to_field='user_id')
-    media_id = peewee.ForeignKeyField(media,to_field='media_id')
+    media_id = peewee.ForeignKeyField(media, to_field='media_id')
     comment_text = peewee.CharField ()
 
     class Meta:
         database = database
 
 
+class self_comment (peewee.Model):
+    comment_id = peewee.CharField(unique=True)
+    media_id = peewee.ForeignKeyField(media, to_field='media_id')
+    comment_text = peewee.CharField ()
+    positive_sentiments = peewee.IntegerField()
+    negative_sentiments = peewee.IntegerField()
+    classification = peewee.CharField()
+
+    class Meta:
+        database = database
+
+
+class likers_list (peewee.Model):
+    user_id = peewee.ForeignKeyField(user, to_field='user_id')
+    media_id = peewee.ForeignKeyField(media, to_field='media_id')
+    liker_username = peewee.CharField()
+
+    class Meta:
+        database = database
+
+
 def initialize_db():
-    database.create_tables ([user, media, comments], safe=True)
+    database.create_tables ([user, media, comments, self_comment, likers_list], safe=True)
 
 
 initialize_db()
