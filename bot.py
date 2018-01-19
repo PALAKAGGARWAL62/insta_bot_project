@@ -13,6 +13,11 @@ from textblob.sentiments import NaiveBayesAnalyzer
 # to implement database
 import models
 
+# to plot bar graph
+import matplotlib.pyplot as plt
+
+from wordcloud import WordCloud
+
 ''' 
 #fetch access token   ...json format url
  response = requests.get ('https://jsonbin.io/b/59d0f30408be13271f7df29c').json ()
@@ -392,6 +397,8 @@ def get_user_post(insta_username):
 # Function to fetch list og post likers
 def post_liker_list():
     try:
+        media_id = 0
+        user_id = 0
         c = input ('\n1. To get self post liker'
                    '\n2. To get user post liker'
                    '\n Enter your choice: ')
@@ -542,6 +549,89 @@ def delete_negative_comment(insta_username):
         print 'Exception in comment deletion'
 
 
+# to check tags on a media using media id  and add tag to dictionary as a key
+# if tag already exists its value is incremented by one
+def calculate_frequency(trends, m_id):
+    try:
+        request_url = base_url + 'media/%s?access_token=%s' % (m_id, access_token)
+        response = requests.get(request_url).json()
+        if response['meta']['code'] == 200:
+            # check tags on a post
+            for tag_name in response['data']['tags']:
+                if tag_name in trends:
+                    # incrementing value of tag name key in trends
+                    trends[tag_name] += 1
+                else:
+                    # adding tag name as a key to trends dictionary
+                    trends[tag_name] = 1
+        else:
+            print 'code other than 200'
+    except Exception as e:
+        print e
+        print 'Exception in calculate frequency'
+
+
+# Function to get posts of a user with tags to analyse trendy posts
+def trendy_posts():
+    try:
+        tag_name = raw_input('Enter main tag name: ')
+        request_url = base_url + 'tags/%s/media/recent?access_token=%s' % (tag_name, access_token)
+        print request_url
+        response = requests.get(request_url).json()
+        if response['meta']['code'] == 200:
+            if len(response['data']) > 0:
+                trends = {}
+                for tag in response['data']:
+                    post_id = tag['id']
+                    calculate_frequency(trends, post_id)
+                if tag_name in trends:
+                    # pop main tag from dictionary trends
+                    trends.pop(tag_name, None)
+                if len(trends) > 0:
+                    # displaying bar graph for sub_tags to check trends
+                    plt.bar(range(len(trends)), trends.values())
+                    plt.xticks(range(len(trends)), trends.keys())
+                    plt.show()
+                else:
+                    print 'nothing to plot'
+            else:
+                print'no posts'
+        else:
+            print'code not 200'
+    except Exception as e:
+        print e
+        print ' Exception in visualization of user tags'
+
+
+# Function to analyse user posts to check their interest
+def analyse_user_interest(insta_user):
+    try:
+        user_id = get_user_id(insta_user)
+        request_url = base_url + 'users/%s/media/recent/?access_token=%s' % (user_id, access_token)
+        print request_url
+        response = requests.get(request_url).json()
+        if response['meta']['code'] == 200:
+            interests = {}
+            for media_post in response['data']:
+                for tag_name in media_post['tags']:
+                    # incrementing value of tag name key in interests
+                    if tag_name in interests:
+                        interests[tag_name] += 1
+                    else:
+                        # adding tag name as a key to interests dictionary
+                        interests[tag_name] = 1
+            if len(interests) > 0:
+                wordcloud = WordCloud().generate_from_frequencies(interests)
+                plt.imshow(wordcloud, interpolation='bilinear')
+                plt.axis('off')
+                plt.show()
+        else:
+            print 'code not 200'
+    except Exception as e:
+        print e
+        print 'Exception in analyse user interest'
+
+
 # Function to start the bot for the selection of different functionality available
 def start_bot():
     flag = True
@@ -561,7 +651,9 @@ def start_bot():
                             '\n11. Self recently liked posts'
                             '\n12. Self negative comment deletion'
                             '\n13. List of people liked self post'
-                            '\n14. Exit'
+                            '\n14. Get posts by tags and visualize likings'
+                            '\n15. Determine user interest'
+                            '\n16. Exit'
                             '\n Your choice please: ')
             if choice == 1:
                 # Display self information
@@ -609,6 +701,13 @@ def start_bot():
                 # fetching list of people like post
                 post_liker_list ()
             elif choice == 14:
+                # posts by tags
+                trendy_posts()
+            elif choice == 15:
+                # analyse user interest
+                name = raw_input ('Enter user name: ')
+                analyse_user_interest(name)
+            elif choice == 16:
                 # Exit
                 flag = False
             else:
